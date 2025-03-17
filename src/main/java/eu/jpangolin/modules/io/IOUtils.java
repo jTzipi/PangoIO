@@ -16,21 +16,24 @@
 
 package eu.jpangolin.modules.io;
 
+import javafx.scene.text.Font;
 import org.apache.commons.io.file.PathUtils;
 
 import org.slf4j.LoggerFactory;
 
+import javax.imageio.ImageIO;
 import javax.swing.filechooser.FileSystemView;
+
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
-import java.nio.file.LinkOption;
+import java.nio.file.Files;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Objects;
-import java.util.PropertyResourceBundle;
-import java.util.ResourceBundle;
+import java.util.*;
 
 /**
  * IOUtils.
@@ -46,6 +49,7 @@ public final class IOUtils {
     // File System View for File system dependent things
     private static final FileSystemView FSV = FileSystemView.getFileSystemView();
 
+    public static final double FONT_MIN_SIZE = 11.0D;
     /**
      * Description of a Directory.
      */
@@ -142,7 +146,7 @@ public final class IOUtils {
      */
     public static String getFileNamePrefix( final Path path )  {
         Objects.requireNonNull(path);
-        if(isDir(path)) {
+        if(Files.isDirectory(path)) {
             return _DIR_;
         }
         return PathUtils.getFileNameString(path);
@@ -160,104 +164,15 @@ public final class IOUtils {
      */
     public static String getFileNameSuffix( final Path path ) {
         Objects.requireNonNull(path);
-        if(isDir(path)) {
+        if(Files.isDirectory(path)) {
             return _DIR_;
         }
         return PathUtils.getExtension(path);
     }
 
 
-    /**
-     * Return whether a path exist.
-     *
-     * @param path path
-     * @return {@code true} if this file is existing
-     * @throws NullPointerException {@code path} is null
-     * @see File#exists()
-     */
-    public static boolean isExisting( final Path path ) {
 
-        return tof( path ).exists();
-    }
-
-    /**
-     * Return whether a path to a file is a <em>regular</em> file.
-     * That is the fil is <u>not</u> a directory and existing.
-     * @param path path to a file
-     * @return {@code true} if the file exists, is not a directory and not any kind of special file
-     * @throws NullPointerException if {@code path} is null
-     * @see File#isFile()
-     */
-    public static boolean isRegular( final Path path ) {
-        return tof(path).isFile();
-    }
-
-    /**
-     * Test whether a path is a directory.
-     *
-     * @param path path
-     * @return {@code true} if {@code path} is a directory
-     * @throws NullPointerException if {@code} path
-     *
-     * @see PathUtils#isDirectory(Path, LinkOption...)
-     */
-    public static boolean isDir(final Path path, LinkOption... option) {
-        Objects.requireNonNull(path);
-        return PathUtils.isDirectory(path, option);
-    }
-
-    /**
-     * Return whether path is hidden.
-     *
-     * @param path path
-     * @return {@code true} if the {@code path} is file system hidden
-     * @throws NullPointerException if {@code path}
-     */
-    public static boolean isHidden( final Path path ) {
-
-        return tof( path ).isHidden();
-    }
-    /**
-     * Return whether a file exists and file  can read.
-     * This may return {@code true} but  unprivileged user
-     * can <u>not</u> enter.
-     *
-     * @param path path
-     * @return {@code true} if the {@code path}  is readable
-     * @throws NullPointerException if {@code path} is null
-     */
-    public static boolean isReadable( final Path path ) {
-
-        final File file = tof( path );
-
-        return file.exists() && file.canRead();
-    }
-
-    /**
-     * Return whether a file is writable.
-     * @param path path to file
-     * @return {@code true} if the {@code path} is writable
-     * @throws NullPointerException if {@code path} is null
-     */
-    public static boolean isWritable( final Path path ) {
-
-        final File file = tof( path );
-
-        return file.exists() && file.canWrite();
-    }
-
-    /**
-     * Return whether a file is executable.
-     * @param path path to file
-     * @return {@code true} if the {@code path} is executable
-     * @throws NullPointerException if {@code path} is null
-     */
-    public static boolean isExecutable( final Path path ) {
-
-        final File file = tof( path );
-
-        return file.exists() && file.canExecute();
-    }
+    /* ------------------------ File System View related ----------------------------------*/
 
     /**
      * Is the path donating to a file system drive.
@@ -288,6 +203,297 @@ public final class IOUtils {
         return FSV.isComputerNode(tof(path));
     }
 
+    /* -------------------------------------- Loading Images/Fonts/Resources --------------------------------------- */
+
+    /**
+     * Try to load a file as a BufferedImage.
+     *
+     * @param path path to file
+     * @return buffered image
+     * @throws IOException          if file is not readable or failed to read as image
+     * @throws NullPointerException if  {@code path} is null
+     */
+    public static java.awt.image.BufferedImage loadBufferedImage( final Path path ) throws IOException {
+
+        Objects.requireNonNull( path );
+        if ( !Files.isReadable( path ) ) {
+            throw new IOException( "Path[='" + path + "'] is not readable" );
+        }
+        return ImageIO.read( path.toFile() );
+    }
+
+    /**
+     * Try to load an image via resources.
+     *
+     * @param cls class
+     * @param fileNameStr file
+     * @return buffered image
+     * @throws IOException Failed
+     * @throws IllegalStateException if {@code fileNameStr} is not readable hence the stream is null
+     * @throws NullPointerException if {@code cls} | {@code fileNameStr}
+     */
+    public static java.awt.image.BufferedImage loadBufferedImageFromResource( final Class<?> cls, final String fileNameStr ) throws IOException {
+        Objects.requireNonNull( cls );
+        Objects.requireNonNull( fileNameStr );
+        try( InputStream is = cls.getResourceAsStream( fileNameStr ) ) {
+            if( null == is ) {
+                throw new IllegalStateException("file [='"+fileNameStr+"'] not found for class [='"+cls+"']");
+            }
+            return ImageIO.read( is );
+        }
+
+    }
+
+    /**
+     * Try to load a file as a javafx image.
+     *
+     * @param path path to image
+     * @return image
+     * @throws IOException          failed to read file
+     * @throws NullPointerException if {@code path} is null
+     */
+    public static javafx.scene.image.Image loadJavaFXImage( final Path path ) throws IOException {
+
+        Objects.requireNonNull( path, "Path is null" );
+
+        if ( !Files.isReadable( path ) ) {
+            throw new IOException( "Path[='" + path + "'] is not readable" );
+        }
+
+        try ( InputStream fis = Files.newInputStream( path ) ) {
+            return new javafx.scene.image.Image( fis );
+        }
+    }
+
+    /**
+     * Load a JavaFX font from path.
+     *
+     * @param path path
+     * @param size size
+     * @return Font object
+     * @throws IOException          io loading font or {@code path} is not readable
+     * @throws NullPointerException if {@code path} is null
+     */
+    public static javafx.scene.text.Font loadFont( final Path path, final double size ) throws IOException {
+
+        Objects.requireNonNull( path );
+        // Error
+        if ( !Files.isReadable( path ) ) {
+            throw new IOException( "Path [='" + path + "'] is not readable" );
+        }
+
+        // try
+        final javafx.scene.text.Font font;
+        try ( final InputStream io = Files.newInputStream( path ) ) {
+
+            font = javafx.scene.text.Font.loadFont( io, size );
+        }
+
+        return font;
+
+    }
+
+    /**
+     * Try to load a JavaFX font or return default system font.
+     *
+     * @param path path to font
+     * @param fontSize font size
+     * @return font or system default
+     * @throws NullPointerException if {@code path} is null
+     */
+    public static javafx.scene.text.Font loadFontSafe( final Path path, double fontSize ) {
+
+        Objects.requireNonNull( path );
+        fontSize = Math.max(fontSize, FONT_MIN_SIZE);
+        Font font;
+        try {
+            font = loadFont( path, fontSize );
+        } catch ( final IOException ioe ) {
+            LOG.info( "Failed to load font for path[='{}']",path );
+            font = javafx.scene.text.Font.getDefault();
+        }
+        return font;
+    }
+
+
+    /**
+     * Load a font from resource.
+     * @param cls class
+     * @param fileNameStr file name
+     * @param fontSize font size [{@linkplain #FONT_MIN_SIZE} .. ]
+     * @return font
+     * @throws IOException fail to load font
+     * @throws IllegalStateException if file name is not found
+     * @throws NullPointerException if {@code cls} | {@code fileNameStr}
+     */
+    public static javafx.scene.text.Font loadFontFromResource( final Class<?> cls, final String fileNameStr, double fontSize ) throws
+            IOException {
+
+        Objects.requireNonNull( cls );
+        Objects.requireNonNull( fileNameStr );
+        fontSize = Math.max( fontSize, FONT_MIN_SIZE );
+
+        try( InputStream is = cls.getResourceAsStream( fileNameStr ) ) {
+            if( null == is ) {
+                throw new IllegalStateException("Font InputStream is null");
+            }
+
+            return javafx.scene.text.Font.loadFont( is, fontSize );
+        }
+    }
+    /* -------------------------------------- Loading Properties --------------------------------------- */
+    /**
+     * Load Properties from path.
+     * If {@code prop} is {@code null} we create a new one.
+     * @param pathToProp path to properties
+     * @param prop       properties
+     * @throws IOException              if {@code pathToProp} !readable
+     * @throws NullPointerException     if {@code pathToProp} is null
+     * @throws IllegalArgumentException if {@code pathToProp} is dir
+     */
+    public static void loadProperties( final Path pathToProp, Properties prop ) throws IOException {
+
+        Objects.requireNonNull( pathToProp );
+        //
+        if ( !Files.isReadable( pathToProp ) ) {
+            throw new IOException( "Path[='" + pathToProp + "'] not readable" );
+        }
+        // If no file throw
+        if ( Files.isDirectory( pathToProp ) ) {
+            throw new IllegalArgumentException( "You try to read properties from dir[='" + pathToProp + "']" );
+        }
+        //
+        if ( null == prop ) {
+            prop = new Properties();
+        }
+
+        try ( final InputStream inStream = Files.newInputStream( pathToProp ) ) {
+            prop.load( inStream );
+        }
+
+    }
+
+    /**
+     * Try to read the properties contained in the file.
+     *
+     * @param path path to file
+     * @return properties
+     * @throws IOException              read of path failed
+     * @throws NullPointerException     if {@code path} is null
+     * @throws IllegalArgumentException if {@code pathToProp} is dir
+     */
+    public static Properties loadProperties( final Path path ) throws IOException {
+
+        Properties prop = new Properties();
+
+        loadProperties( path, prop );
+
+        return prop;
+    }
+
+    /**
+     * Read a '.properties'-file as a resource located file.
+     *
+     * @param cls     cls
+     * @param fileStr file name
+     * @return properties
+     * @throws IOException           if file not readable
+     * @throws IllegalStateException if stream is null
+     * @throws NullPointerException  if {@code cls}|{@code fileStr} is null
+     */
+    public static Properties loadPropertiesFromResource( Class<?> cls, String fileStr ) throws IOException {
+        Objects.requireNonNull( cls );
+        Objects.requireNonNull( fileStr );
+        Properties prop = new Properties();
+        loadPropertiesFromResource( cls, fileStr, prop );
+        return prop;
+
+    }
+    /**
+     * Read a '.properties'-file as a resource located file.
+     *
+     * @param cls     cls
+     * @param fileStr file name
+     * @param properties properties
+     * @throws IOException           if file not readable
+     * @throws IllegalStateException if stream is null
+     * @throws NullPointerException  if {@code cls}|{@code fileStr}|{@code properties} is null
+     */
+    public static void loadPropertiesFromResource( final Class<?> cls, final String fileStr, final Properties properties ) throws IOException {
+        Objects.requireNonNull( cls );
+        Objects.requireNonNull( fileStr );
+        Objects.requireNonNull( properties );
+
+        LOG.info( "try to load '{}' from '{}'", fileStr, cls.getSimpleName() );
+        try ( InputStream is = cls.getResourceAsStream( fileStr ) ) {
+
+            if ( null == is ) {
+                throw new IllegalStateException( "File '"+ fileStr+"' not found or not readable" );
+            }
+            properties.load( is );
+
+        }
+        LOG.info( "'{}' loaded Okay!", fileStr );
+
+
+    }
+
+    /**
+     * Load a resource as a string wrapped in an StringBuilder.
+     *
+     * @param cls           cls to load from
+     * @param fileStr       file name
+     * @param appendNewLine append new line ({@literal \n}
+     * @return String Builder with file content
+     * @throws IOException          fail to load
+     * @throws NullPointerException if {@code cls}|{@code fileStr}
+     */
+    public static StringBuilder loadResourceString( final Class<?> cls, String fileStr, boolean appendNewLine ) throws IOException {
+        Objects.requireNonNull( cls, "class is null" );
+        Objects.requireNonNull( fileStr, "File is null!" );
+        StringBuilder sb = new StringBuilder();
+
+        try ( InputStream resIs = cls.getResourceAsStream( fileStr ) ) {
+            if ( null == resIs ) {
+                throw new IOException( "InputStream for resource '" + fileStr + "' can not created!Was null!" );
+            }
+
+            try (Scanner scan = new Scanner(resIs)) {
+                while (scan.hasNextLine()) {
+                    sb.append(scan.nextLine());
+                    if (appendNewLine) {
+                        sb.append('\n');
+                    }
+                }
+            }
+        }
+
+        return sb;
+    }
+
+    /**
+     * Write global JaMeLime properties file.
+     *
+     * @param path Path to write
+     * @param prop    properties
+     * @param commentStr comment (optional)
+     * @throws IOException          io
+     * @throws NullPointerException if {@code path}|{@code prop} is null
+     */
+    public static void writeProperties(Path path, Properties prop, String commentStr ) throws IOException {
+        Objects.requireNonNull( path );
+        Objects.requireNonNull( prop );
+
+        if ( null == commentStr ) {
+            commentStr = "<Auto Generated Comment!>";
+        }
+
+        try ( BufferedWriter bw = Files.newBufferedWriter( path ) ) {
+            prop.store( bw, commentStr );
+        }
+
+        LOG.info( "Wrote to '{}' okay!!", path );
+    }
     /**
      * Converts a path to a file.
      * @param path path to file
